@@ -1,0 +1,15 @@
+{
+  "name": "emerald-launcher",
+  "version": "0.1.0",
+  "description": "EMERALD - Minecraft launcher",
+  "main": "main.js",
+  "scripts": { "start": "electron .", "build": "electron-builder --win --publish never" },
+  "dependencies": { "skinview3d": "^3.0.0" },
+  "devDependencies": { "electron": "^33.0.0", "electron-builder": "^25.1.8" },
+  "build": {
+    "appId": "app.emerald.launcher",
+    "productName": "EMERALD",
+    "win": { "target": "nsis" },
+    "files": ["**/*", "!.github"]
+  }
+}

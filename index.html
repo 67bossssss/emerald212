@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>EMERALD</title>
+<style>
+*{box-sizing:border-box;margin:0}
+[hidden]{display:none!important}
+body{font:15px system-ui,sans-serif;color:#e8f5ee;height:100vh;overflow:hidden;background:#0b1410}
+#bg{position:fixed;inset:0;background:center/cover no-repeat #0b1410;z-index:-1}
+button,input,select{font:inherit;color:inherit;background:#12261c;border:1px solid #1f4a35;border-radius:10px;padding:11px 14px}
+button{cursor:pointer;text-align:left}
+button:hover,nav .on{background:#17c964;color:#04130b;border-color:#17c964}
+header{position:fixed;top:0;left:0;width:200px;height:70px;display:flex;align-items:center;gap:10px;padding:0 16px;font-size:20px;font-weight:700;letter-spacing:3px;background:#07100ce0;z-index:2}
+header img{width:38px;height:38px;object-fit:contain}
+nav{position:fixed;left:0;top:70px;bottom:0;width:200px;padding:14px;display:flex;flex-direction:column;justify-content:flex-end;gap:10px;background:#07100ce0;backdrop-filter:blur(8px)}
+.view{position:fixed;left:200px;right:0;top:0;bottom:0;padding:30px}
+#v-home{display:flex;flex-direction:column;align-items:center;justify-content:center}
+#nick{margin-top:8px;font-size:20px;font-weight:600}
+#play{position:fixed;right:30px;bottom:30px;font-size:22px;font-weight:700;padding:16px 48px;background:#17c964;color:#04130b;text-align:center}
+#v-cat,#v-set{overflow:auto;background:#0b1410d9}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.tabs .on{background:#17c964;color:#04130b}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:14px}
+.card{display:flex;flex-direction:column;gap:6px;padding:12px;border-radius:12px;background:#12261c;border:1px solid #1f4a35}
+.card img{width:48px;height:48px;border-radius:8px}.card span{font-size:13px;opacity:.75}
+.row{display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap}
+#modal,#auth{position:fixed;inset:0;background:#000b;display:flex;align-items:center;justify-content:center;z-index:5}
+#auth{background:#0b1410;z-index:9}
+.box{background:#0e1d16;border:1px solid #1f4a35;border-radius:16px;padding:22px;width:min(560px,92vw);display:flex;flex-direction:column;gap:10px}
+#vlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;max-height:55vh;overflow:auto}
+#vlist button{text-align:center;padding:9px 4px}
+progress{width:100%}#err{color:#ff6b6b}
+</style></head><body>
+<div id="bg"></div>
+<header><img src="assets/emerald.png">EMERALD</header>
+<nav>
+  <button data-v="set">⚙ Настройки</button>
+  <button data-v="cat">▦ Каталог</button>
+  <button data-v="home" class="on">⌂ Главная</button>
+</nav>
+
+<section class="view" id="v-home">
+  <canvas id="skin"></canvas><div id="nick"></div>
+  <button id="play">ИГРАТЬ</button>
+</section>
+
+<section class="view" id="v-cat" hidden>
+  <div class="tabs" id="tabs"></div>
+  <input id="q" placeholder="Поиск (Modrinth)…" style="width:100%">
+  <div id="grid"></div>
+</section>
+
+<section class="view" id="v-set" hidden>
+  <h2>Настройки</h2>
+  <div class="row"><button id="bgBtn">Сменить фон</button><button id="bgClear">Убрать фон</button>
+    <select id="fit"><option value="cover">Заполнить</option><option value="100% 100%">Растянуть</option><option value="contain">Вписать</option></select></div>
+  <div class="row">Масштаб окна <input id="scale" type="range" min="0.8" max="1.4" step="0.05"></div>
+  <div class="row"><input id="nickIn" maxlength="16"><button id="nickBtn">Сменить ник</button></div>
+  <div class="row"><button id="out">Выйти из аккаунта</button></div>
+  <div id="serr" style="color:#ff6b6b"></div>
+</section>
+
+<div id="modal" hidden><div class="box">
+  <b>Выбери версию Minecraft</b>
+  <div id="vlist"></div>
+  <progress id="bar" hidden></progress><div id="st"></div>
+  <button id="close">Закрыть</button>
+</div></div>
+
+<div id="auth"><div class="box">
+  <h2>EMERALD</h2>
+  <input id="lg" placeholder="Логин"><input id="pw" type="password" placeholder="Пароль">
+  <input id="em" placeholder="Почта (необязательно)">
+  <div id="err"></div>
+  <div class="row"><button id="bLogin">Войти</button><button id="bReg">Регистрация</button></div>
+</div></div>
+
+<script src="node_modules/skinview3d/bundles/skinview3d.bundle.js"></script>
+<script>
+const $ = s => document.querySelector(s), api = window.api;
+const h = (t, p = {}, ...k) => { const e = Object.assign(document.createElement(t), p); e.append(...k); return e; };
+let me = null, viewer = null, type = 'mod';
+
+function show(v) {
+  document.querySelectorAll('.view').forEach(x => x.hidden = x.id !== 'v-' + v);
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  if (v === 'cat') search();
+}
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => show(b.dataset.v));
+
+async function applySettings() {
+  const s = await api.call('settings');
+  api.zoom(s.scale || 1); $('#scale').value = s.scale || 1; $('#fit').value = s.fit || 'cover';
+  $('#bg').style.backgroundImage = s.bg ? `url("file:///${s.bg.replace(/\\/g, '/')}")` : '';
+  $('#bg').style.backgroundSize = s.fit || 'cover';
+}
+async function loadSkin() {
+  if (!viewer) {
+    viewer = new skinview3d.SkinViewer({ canvas: $('#skin'), width: 300, height: 420 });
+    viewer.autoRotate = true; viewer.autoRotateSpeed = 0.6;
+    viewer.animation = new skinview3d.IdleAnimation();
+  }
+  const d = await api.call('skin', me.nick); if (d) viewer.loadSkin(d);
+}
+async function enter(u) {
+  me = u; $('#auth').hidden = true; $('#nick').textContent = u.nick; $('#nickIn').value = u.nick;
+  await applySettings(); loadSkin(); show('home');
+}
+async function auth(kind) {
+  const r = await api.call(kind, $('#lg').value.trim(), $('#pw').value, $('#em').value.trim());
+  r.err ? $('#err').textContent = r.err : enter(r.user);
+}
+$('#bLogin').onclick = () => auth('login'); $('#bReg').onclick = () => auth('reg');
+api.call('me').then(u => u && enter(u));
+
+// играть -> версии
+$('#play').onclick = async () => {
+  $('#modal').hidden = false; const l = $('#vlist'); l.replaceChildren(h('i', { textContent: 'Загрузка…' }));
+  const vs = await api.call('versions'); l.replaceChildren();
+  vs.forEach(v => l.append(h('button', { textContent: v.id, onclick: () => get(v.id) })));
+};
+$('#close').onclick = () => $('#modal').hidden = true;
+api.onProgress(d => { const b = $('#bar'); b.hidden = false; b.max = d.total; b.value = d.done; $('#st').textContent = `${d.done} / ${d.total} файлов`; });
+async function get(id) {
+  $('#st').textContent = 'Скачиваю ' + id + '…';
+  const r = await api.call('download', id);
+  $('#st').textContent = r.err ? 'Ошибка: ' + r.err : 'Готово: ' + id + ' скачана';
+}
+
+// каталог
+const TABS = [['mod', 'Моды'], ['resourcepack', 'Текстур-паки'], ['shader', 'Шейдеры'], ['map', 'Карты'], ['skin', 'Скины']];
+TABS.forEach(([t, n]) => $('#tabs').append(h('button', { textContent: n, className: t === type ? 'on' : '', onclick: e => {
+  type = t; document.querySelectorAll('#tabs button').forEach(b => b.classList.remove('on')); e.target.classList.add('on'); search(); } })));
+let tm; $('#q').oninput = () => { clearTimeout(tm); tm = setTimeout(search, 350); };
+async function search() {
+  const g = $('#grid'); g.replaceChildren();
+  if (!['mod', 'resourcepack', 'shader'].includes(type)) { g.append(h('p', { textContent: 'Скоро: этот раздел подключим следующим шагом (CurseForge, нужен API-ключ).' })); return; }
+  (await api.call('search', type, $('#q').value)).forEach(p =>
+    g.append(h('div', { className: 'card' }, h('img', { src: p.icon_url || '' }), h('b', { textContent: p.title }), h('span', { textContent: p.description }))));
+}
+
+// настройки
+$('#bgBtn').onclick = async () => { const p = await api.call('pickBg'); if (p) { await api.call('setSettings', { bg: p }); applySettings(); } };
+$('#bgClear').onclick = async () => { await api.call('setSettings', { bg: '' }); applySettings(); };
+$('#fit').onchange = async e => { await api.call('setSettings', { fit: e.target.value }); applySettings(); };
+$('#scale').onchange = async e => { await api.call('setSettings', { scale: +e.target.value }); applySettings(); };
+$('#nickBtn').onclick = async () => {
+  const r = await api.call('setNick', $('#nickIn').value.trim());
+  if (r.err) { $('#serr').textContent = r.err; return; }
+  $('#serr').textContent = ''; me.nick = r.nick; $('#nick').textContent = r.nick; loadSkin();
+};
+$('#out').onclick = async () => { await api.call('logout'); $('#auth').hidden = false; $('#pw').value = ''; };
+</script></body></html>
